@@ -6,14 +6,42 @@ from sklearn.metrics import accuracy_score
 
 # Loading data, we should be able to change name of data set for different data, as long as it has enough patients
 print("Loading the dataset...")
-data = pd.read_csv('dataset-original.csv')
-data = data.set_index('Unnamed: 0')
+filepath = 'dataset-original.csv'   # You can modify the name of the dataset to test different data
+data = pd.read_csv(filepath, low_memory=False, index_col=0)
 
 # get types of cancer from index
 cancer_types = data.index.str.extract('([A-Za-z]+)', expand=False)
 
+# Data cleaning
+data = data.loc[:, ~data.columns.duplicated()]                  # Drop duplicated columns
+data = data.map(lambda x: 1 if x > 1 else (0 if x < 0 else x))  # Since the data in the expanded dataset is binary, correct outliers by setting them to 1 if x > 1 or 0 if x < 0
+data = data.loc[:, data.sum(axis=0) > 0]                        # Remove all irrelevant columns which contain only zeroes
+# Work in progress
+
 all_correct = 0
 all_total = 0
+
+
+def select_features(data_type1, data_type2, num_features=1000):
+
+    # Remove rare mutations (occurring less than 5 times in total)
+    combined_data = pd.concat([data_type1, data_type2])
+    mutation_counts = combined_data.sum(axis=0)
+    frequent_mutations = mutation_counts[mutation_counts >= 5].index.tolist()
+    
+    # Filter data to include only frequent mutations
+    data_type1_filtered = data_type1[frequent_mutations]
+    data_type2_filtered = data_type2[frequent_mutations]
+    freq_type1 = (data_type1_filtered > 0).mean(axis=0)
+    freq_type2 = (data_type2_filtered > 0).mean(axis=0)
+    freq_diff = abs(freq_type1 - freq_type2)
+    
+    #Selecting top features based on frequency difference
+    top_features = freq_diff.sort_values(ascending=False).iloc[:num_features].index.tolist()
+    
+    print(f"Selected {len(top_features)} features out of {len(frequent_mutations)} frequent mutations")
+    return top_features
+
 
 # Building this so it is easy to change the cancer type when making changes
 def run_perceptron_model(cancer_type1, cancer_type2):
@@ -31,6 +59,14 @@ def run_perceptron_model(cancer_type1, cancer_type2):
     type1_indices = filtered_data[filtered_labels == cancer_type1].index
     type2_indices = filtered_data[filtered_labels == cancer_type2].index
     
+    # feature selection
+    data_type1 = filtered_data.loc[type1_indices]
+    data_type2 = filtered_data.loc[type2_indices]
+    selected_features = select_features(data_type1, data_type2, num_features=1000)
+    filtered_data = filtered_data[selected_features]  # Keep only selected features
+    
+
+
     # Select 200 samples for training and 200 for testing from each type
     # Split data for testing
     train_indices = np.concatenate([type1_indices[:200], type2_indices[:200]])
