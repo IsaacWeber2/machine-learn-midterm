@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Perceptron
 from sklearn.model_selection import cross_val_score, KFold # for cross validation
@@ -11,21 +12,26 @@ print("Loading the dataset...")
 filepath = 'dataset-original.csv'   # You can modify the name of the dataset to test different data
 data = pd.read_csv(filepath, low_memory=False, index_col=0)
 
+# Data cleaning
+print('Before data cleaning:')
+print(data.info())
+print(data.describe())
+data = data.loc[:, ~data.columns.duplicated()]                  # Drop duplicated columns
+data = data.map(lambda x: 1 if x > 1 else (0 if x < 0 else x))  # Intended for the expanded dataset, but also works for the original dataset
+                                                                # as it improves number of total correct predictions and overall accuracy
+data = data.loc[:, data.sum(axis=0) > 0]                        # Remove all irrelevant columns which contain only zeroes
+data = data.astype('int8')                                      # Set the data type to int8 to save memory (int64 -> int8)
+print('After data cleaning:')
+print(data.info())
+print(data.describe())
+
 # get types of cancer from index
 cancer_types = data.index.str.extract('([A-Za-z]+)', expand=False)
-
-# Data cleaning
-data = data.loc[:, ~data.columns.duplicated()]                  # Drop duplicated columns
-data = data.map(lambda x: 1 if x > 1 else (0 if x < 0 else x))  # Since the data in the expanded dataset is binary, correct outliers by setting them to 1 if x > 1 or 0 if x < 0
-data = data.loc[:, data.sum(axis=0) > 0]                        # Remove all irrelevant columns which contain only zeroes
-# Work in progress
 
 all_correct = 0
 all_total = 0
 
-
 def select_features(data_type1, data_type2, num_features=1000):
-
     # Remove rare mutations (occurring less than 5 times in total)
     combined_data = pd.concat([data_type1, data_type2])
     mutation_counts = combined_data.sum(axis=0)
