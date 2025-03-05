@@ -2,7 +2,9 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Perceptron
+from sklearn.model_selection import cross_val_score, KFold # for cross validation
 from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
 
 # Loading data, we should be able to change name of data set for different data, as long as it has enough patients
 print("Loading the dataset...")
@@ -44,7 +46,7 @@ def select_features(data_type1, data_type2, num_features=1000):
 
 
 # Building this so it is easy to change the cancer type when making changes
-def run_perceptron_model(cancer_type1, cancer_type2):
+def run_perceptron_model(cancer_type1, cancer_type2, accuracies):
     global all_correct, all_total
     
     print(f"\n--- Perceptron Model: {cancer_type1} vs {cancer_type2} ---")
@@ -83,15 +85,23 @@ def run_perceptron_model(cancer_type1, cancer_type2):
     
     # Create and train the perceptron
     # setting our iterations and learning rate 
-    perceptron = Perceptron(max_iter=10, eta0=0.001, random_state=42)
+    perceptron = Perceptron(max_iter=100, eta0=0.001, random_state=42) # increased the iteration to improve the fit
     perceptron.fit(X_train_scaled, y_train)
-    
+
+    # Cross-validation using k-fold
+    kfold = KFold(n_splits=5, random_state=42, shuffle=True) # divide data into 5 parts
+    # Perform cross-validation
+    scores = cross_val_score(perceptron, X_test_scaled, y_test, cv=kfold)
+
     # Calculate and make predictions
     test_predictions = perceptron.predict(X_test_scaled)
     accuracy = accuracy_score(y_test, test_predictions)
     print(f"Overall Accuracy: {accuracy * 100:.2f}%")
-    
-    # accuracy for each tupe
+    print(f'Cross-validation scores: {scores}')
+    accuracies.append((f"{cancer_type1} vs {cancer_type2}", accuracy * 100))
+
+
+    # accuracy for each type
     type1_correct = sum((y_test == 0) & (test_predictions == 0))
     type1_total = sum(y_test == 0)
     type2_correct = sum((y_test == 1) & (test_predictions == 1))
@@ -104,11 +114,33 @@ def run_perceptron_model(cancer_type1, cancer_type2):
     all_correct += correct_predictions
     all_total += total_predictions
 
+
+
+accuracies = []
+run_perceptron_model('brca', 'luad', accuracies)
+run_perceptron_model('brca', 'prad', accuracies)
+run_perceptron_model('luad', 'prad', accuracies)
+
+# Now plot the accuracies
+def plot_accuracies(accuracies):
+    labels, values = zip(*accuracies)  # Unzips the list of tuples into two lists
+    plt.figure(figsize=(10, 5))
+    plt.bar(labels, values, color='blue')
+    plt.xlabel('Comparison Groups')
+    plt.ylabel('Accuracy (%)')
+    plt.title('Perceptron Model Accuracies')
+    plt.ylim([min(values) - 5, 100])  # Sets the y-axis limits
+    plt.show()
+
+plot_accuracies(accuracies)
+    
+'''
 # Run the three perceptron models
-#print out resutls indavidualy and combined
+#print out results individually and combined
 run_perceptron_model('brca', 'luad')
 run_perceptron_model('brca', 'prad')
 run_perceptron_model('luad', 'prad')
+'''
 print("\nAll models completed!")
 print("\n--- Combined Results ---")
 overall_accuracy = (all_correct / all_total) * 100
